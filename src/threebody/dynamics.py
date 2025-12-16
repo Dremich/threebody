@@ -4,11 +4,16 @@ State vector convention (flat np array, length 18):
     y = [x1,y1,z1,x2,y2,z2,x3,y3,z3,vx1,vy1,vz1,vx2,vy2,vz2,vx3,vy3,vz3]
 
 All bodies have mass m_i and move in three-dimensional space.
+
+Authors: Andrew Tolton: Implementation of dynamics and Jacobian.
+         Copilot, GPT 5.2: Contracts and implementation of helper methods.
+         
+Date: 12-15-2025
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Tuple
 
 import numpy as np
@@ -23,7 +28,7 @@ class DynamicsParams:
 
     G: float = 1.0
     softening: float = 0.0
-    masses: np.ndarray = np.array([1.0, 1.0, 1.0], dtype=float)
+    masses: np.ndarray = field(default_factory=lambda: np.array([1.0, 1.0, 1.0], dtype=float)    )
 
 def split_state(y: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """Helper function to split flat state into positions and velocities.
@@ -102,12 +107,73 @@ def accelerations(r: np.ndarray, *, params: DynamicsParams | None = None) -> np.
 
     return a
 
-
 def rhs(t: float, y: np.ndarray, *, params: DynamicsParams | None = None) -> np.ndarray:
     """Right-hand side for the ODE y' = f(t, y)."""
     r, v = split_state(y)
     a = accelerations(r, params=params)
     return pack_state(v, a)
+
+def jacobian(t: float, y: np.ndarray, *, params: DynamicsParams | None = None) -> np.ndarray:
+    """Compute the Jacobian matrix of the ODE RHS."""
+    if params is None:
+        params = DynamicsParams()
+
+    # Enforce array shapes
+    masses = np.asarray(params.masses, dtype=float)
+    if masses.shape != (_N_BODIES,):
+        raise ValueError(f"Expected masses.shape == ({_N_BODIES},), got {masses.shape}")
+
+    # Initialize Jacobian matrix
+    J = np.zeros((18, 18))
+    eps2 = float(params.softening) ** 2
+    G = float(params.G)
+
+    # COMPUTE JACOBIAN IN 4 [9 x 9] BLOCKS
+    # [ [  A  ] [  B  ] ]
+    # [ [  C  ] [  D  ] ]
+
+    # Block A: d/dr (dx/dt) = 0
+    # ALREADY INITIALIZED TO 0
+    
+    # Block B: d/dv (dx/dt) = I
+    J[0:9, 9:18] = np.eye(9)
+    
+    # Block C: d/dr (dv/dt):
+    # [ C ] = [ [aa] [ab] [ac] ]
+    #       = [ [ba] [bb] [bc] ]
+    #      =  [ [ca] [cb] [cc] ]
+    # where [aa] is the 3x3 matrix for body a's interaction with body a, 
+    # [ab] is the 3x3 matrix for body a's interaction with body b, etc.
+    #
+    # [aa] = - G * sum_{j!=i} m_j * (I - 3*dr*dr^T / ||dr||^2) / ||dr||^3
+    #   where dr is the vector from body a to body b, and ||dr||^2 = dr.dr + eps^2
+    # [ab] = + G * m_j * (I - 3*dr*dr^T / ||dr||^2) / ||dr||^3
+    #   ...
+    
+    blockC = np.zeros((9, 9))
+    r, v = split_state(y)
+    for i in range(_N_BODIES):
+        for j in range(_N_BODIES):
+            if i == j: # skip diagonal terms -- compute them separately below
+                continue
+            dr = r[j] - r[i]
+            drdrT = np.outer(dr, dr)
+            dist2 = float(dr[0] * dr[0] + dr[1] * dr[1] + dr[2] * dr[2]) + eps2
+            if dist2 <= 0.0:
+                raise FloatingPointError("Non-positive pair distance squared encountered")
+            inv_dist3 = dist2 ** (-1.5)
+            inv_dist5 = dist2 ** (-2.5)
+            
+            
+            blockC[3*i : 3*(i+1), 3*j:3*(j+1)] = G * masses[j] * (inv_dist3*np.eye(3) - 3.0 * drdrT * inv_dist5)
+            blockC[3*i : 3*(i+1), 3*i : 3*(i+1)] -= G * masses[j] * (inv_dist3*np.eye(3) - 3.0 * drdrT * inv_dist5)   
+
+    J[9:18, 0:9] = blockC
+    
+    # Block D: d/dv (dv/dt) = 0
+    # ALREADY INITIALIZED TO 0
+    
+    return J
 
 
 def energy(y: np.ndarray, *, params: DynamicsParams | None = None) -> float:

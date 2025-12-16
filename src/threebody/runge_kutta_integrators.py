@@ -1,10 +1,9 @@
-"""Explicit Runge-Kutta IVP integration.
+"""Explicit Runge-Kutta IVP integration. 
+This module implements the embedded Runge-Kutta pair Dormand-Prince5(4) for adaptive
+stepsize IVP integration.
 
-This module provides a Runge-Kutta pairs for adaptive stepping.
-
-Design goals:
-- Pure functions over flat numpy arrays
-- Rigorous error estimation via embedded pairs
+Author: Andrew Tolton, University of California, Los Angeles
+Date: 12-15-2025
 """
 
 from __future__ import annotations
@@ -14,43 +13,37 @@ from typing import Callable, Tuple
 
 import numpy as np
 
-
+# Define type for forcing function f(t, y) -> dy/dt
 VectorField = Callable[[float, np.ndarray], np.ndarray]
-
 
 @dataclass(frozen=True)
 class EmbeddedRKTableau:
     """Butcher tableau for an embedded explicit RK pair.
+    This class allows for the generalization of any embedded RK pair by specifying the
+    Butcher tableau coefficients.
 
     Attributes:
-        c: Stage times, shape (s,)
-        a: Strictly lower-triangular stage weights, shape (s,s)
-        b_high: Weights for the higher-order solution, shape (s,)
-        b_low: Weights for the lower-order (embedded) solution, shape (s,)
+        a: Coefficients for the intermediate stages.
+        b_high: Coefficients for the high order final stage.
+        b_low: Coefficients for the low order final stage.
+        c: Coefficients for the intermediate time steps.
         order_high: Order of the high solution (used by controllers)
         order_low: Order of the low solution (used by controllers)
     """
-
     # Initialize butcher tableau arrays
-    c: np.ndarray
-    a: np.ndarray
-    b_high: np.ndarray
-    b_low: np.ndarray
+    c: np.ndarray # [s,]
+    a: np.ndarray # [s, s]
+    b_high: np.ndarray # [s,]
+    b_low: np.ndarray # [s,]
     order_high: int
     order_low: int
 
 def dormand_prince54() -> EmbeddedRKTableau:
-    """Dormand-Prince 5(4) embedded RK pair.
+    """Dormand-Prince 5(4) embedded RK pair. This is a 7-stage method computing a 5th and 4th order solution.
     Coefficients from https://en.wikipedia.org/wiki/Dormand%E2%80%93Prince_method
 
     Returns:
         EmbeddedRKTableau configured for Dormand-Prince.
-
-    Notes:
-        High order: 5
-        Embedded (error estimator): 4
-
-        Coefficients are the standard Dormand-Prince tableau.
     """
 
     a_coeffs = np.array([
@@ -76,7 +69,7 @@ def dormand_prince54() -> EmbeddedRKTableau:
         order_low=4,
     )
 
-def embedded_rk_step(f: VectorField, t: float, y: np.ndarray, h: float, tableau: EmbeddedRKTableau,
+def rk_step_embedded(f: VectorField, t: float, y: np.ndarray, h: float, tableau: EmbeddedRKTableau,
 ) -> Tuple[np.ndarray, np.ndarray, int]:
     """General method for taking a single step with an embedded Runge-Kutta method. 
     The method computes:

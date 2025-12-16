@@ -19,6 +19,99 @@ from typing import Optional, Sequence, Tuple
 import numpy as np
 
 
+def _dedupe_monotone_time(t: np.ndarray, values: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """Sort by time and drop duplicate time stamps (keeping the last sample).
+
+    Numpy interpolation expects a strictly increasing x-grid.
+    """
+    t = np.asarray(t, dtype=float)
+    if t.ndim != 1:
+        raise ValueError("t must be 1D")
+
+    values = np.asarray(values, dtype=float)
+    if values.shape[0] != t.shape[0]:
+        raise ValueError("values.shape[0] must match t.shape[0]")
+
+    order = np.argsort(t)
+    t_sorted = t[order]
+    v_sorted = values[order]
+
+    # Keep the *last* value for each repeated time stamp.
+    rev = t_sorted[::-1]
+    _, rev_first_idx = np.unique(rev, return_index=True)
+    last_idx = (t_sorted.size - 1 - rev_first_idx)
+    last_idx.sort()
+
+    t_u = t_sorted[last_idx]
+    v_u = v_sorted[last_idx]
+    return t_u, v_u
+
+
+def _resample_uniform(
+    t: np.ndarray,
+    values: np.ndarray,
+    *,
+    fps: float,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Resample values(t) onto a uniform time grid using linear interpolation."""
+    t_u, v_u = _dedupe_monotone_time(t, values)
+    if t_u.size < 2:
+        return t_u, v_u
+
+    dt = np.diff(t_u)
+    if not np.all(np.isfinite(dt)) or np.any(dt <= 0.0):
+        raise ValueError("t must be strictly increasing and finite")
+
+    # If already uniform (within tolerance), keep as-is.
+    dt0 = float(np.median(dt))
+    if dt0 > 0.0 and np.allclose(dt, dt0, rtol=1e-6, atol=1e-12):
+        return t_u, v_u
+
+    duration = float(t_u[-1] - t_u[0])
+    if duration <= 0.0:
+        return t_u, v_u
+
+    fps = float(fps)
+    if not np.isfinite(fps) or fps <= 0.0:
+        raise ValueError("fps must be positive")
+
+    n_uniform = max(2, int(np.ceil(duration * fps)) + 1)
+    t_uniform = np.linspace(t_u[0], t_u[-1], n_uniform, dtype=float)
+
+    if v_u.ndim == 1:
+        v_uniform = np.interp(t_uniform, t_u, v_u).astype(float, copy=False)
+        return t_uniform, v_uniform
+
+    if v_u.ndim == 2:
+        v_uniform = np.empty((n_uniform, v_u.shape[1]), dtype=float)
+        for j in range(v_u.shape[1]):
+            v_uniform[:, j] = np.interp(t_uniform, t_u, v_u[:, j])
+        return t_uniform, v_uniform
+
+    raise ValueError("values must be 1D or 2D")
+
+
+def _interp_to(t: np.ndarray, values: np.ndarray, t_new: np.ndarray) -> np.ndarray:
+    """Interpolate values(t) onto the provided time grid t_new (linear)."""
+    t_u, v_u = _dedupe_monotone_time(t, values)
+    t_new = np.asarray(t_new, dtype=float)
+    if t_new.ndim != 1:
+        raise ValueError("t_new must be 1D")
+    if t_u.size < 2:
+        raise ValueError("Need at least 2 points to interpolate")
+
+    if v_u.ndim == 1:
+        return np.interp(t_new, t_u, v_u).astype(float, copy=False)
+
+    if v_u.ndim == 2:
+        out = np.empty((t_new.size, v_u.shape[1]), dtype=float)
+        for j in range(v_u.shape[1]):
+            out[:, j] = np.interp(t_new, t_u, v_u[:, j])
+        return out
+
+    raise ValueError("values must be 1D or 2D")
+
+
 def _extract_xy(states: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """Extract planar (x,y) positions for each body over time.
 
@@ -92,26 +185,42 @@ class ThreeBodyVisualizer:
         config: VisualizerConfig = VisualizerConfig(),
         fixed_limits: bool = True,
     ) -> None:
-        self.states = np.asarray(states, dtype=float)
-        if self.states.ndim != 2:
+        states_arr = np.asarray(states, dtype=float)
+        if states_arr.ndim != 2:
             raise ValueError("states must have shape (n, d)")
-        self.n = int(self.states.shape[0])
-        if self.n < 2:
+        n0 = int(states_arr.shape[0])
+        if n0 < 2:
             raise ValueError("states must contain at least 2 time points")
 
+        t_arr: np.ndarray | None
         if t is None:
-            self.t = None
+            t_arr = None
         else:
-            self.t = np.asarray(t, dtype=float)
-            if self.t.shape != (self.n,):
+            t_arr = np.asarray(t, dtype=float)
+            if t_arr.shape != (n0,):
                 raise ValueError("t must have shape (n,)")
 
-        self.energy = None
-        if energy is not None:
-            e = np.asarray(energy, dtype=float)
-            if e.shape != (self.n,):
+        energy_arr: np.ndarray | None
+        if energy is None:
+            energy_arr = None
+        else:
+            energy_arr = np.asarray(energy, dtype=float)
+            if energy_arr.shape != (n0,):
                 raise ValueError("energy must have shape (n,)")
-            self.energy = e
+
+        # Adaptive solvers output non-uniform t. For smooth playback (and
+        # consistent speed vs physical time), resample to a uniform grid.
+        if t_arr is not None:
+            t_uniform, states_uniform = _resample_uniform(t_arr, states_arr, fps=float(config.fps))
+            if energy_arr is not None:
+                energy_arr = _interp_to(t_arr, energy_arr, t_uniform)
+            states_arr = states_uniform
+            t_arr = t_uniform
+
+        self.states = np.asarray(states_arr, dtype=float)
+        self.n = int(self.states.shape[0])
+        self.t = None if t_arr is None else np.asarray(t_arr, dtype=float)
+        self.energy = None if energy_arr is None else np.asarray(energy_arr, dtype=float)
 
         self.show_energy = bool(show_energy and self.energy is not None)
         self.config = config

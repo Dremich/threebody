@@ -15,7 +15,7 @@ from .runge_kutta_integrators import (
 	EmbeddedRKTableau,
 	VectorField,
 	dormand_prince54,
-	embedded_rk_step,
+	rk_step_embedded,
 )
 
 from .implicit_integrators import implicit_midpoint_step
@@ -23,8 +23,8 @@ from .implicit_integrators import implicit_midpoint_step
 __all__ = [
 	"VectorField",
 	"EmbeddedRKTableau",
-	"dopri5",
-	"embedded_rk_step",
+	"dormand_prince54",
+	"rk_step_embedded",
 	"implicit_midpoint_step",
 ]
 

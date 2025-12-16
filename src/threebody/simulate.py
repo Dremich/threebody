@@ -214,7 +214,7 @@ def simulate(
     # Local imports keep the core adaptive driver physics-agnostic.
     from .controllers import ControllerConfig, RKAdaptiveController
     from .dynamics import DynamicsParams, energy as _energy, rhs as _rhs
-    from .integrators import dormand_prince54, embedded_rk_step
+    from .integrators import dormand_prince54, rk_step_embedded
 
     tableau = dormand_prince54()
 
@@ -225,7 +225,7 @@ def simulate(
     )
 
     def stepper(f: VectorField, t: float, y: np.ndarray, h: float):
-        return embedded_rk_step(f, t, y, h, tableau)
+        return rk_step_embedded(f, t, y, h, tableau)
 
     params = DynamicsParams(G=float(getattr(problem, "G", 1.0)), masses=np.asarray(problem.masses, dtype=float))
 
