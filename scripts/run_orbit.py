@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import numpy as np
 
 from threebody.problems import load_problem
-from threebody.simulate import simulate
+from threebody.simulate import simulate_rk, simulate_bdf
 from threebody.visualize import visualize
 
 
@@ -40,14 +40,22 @@ def run(
     tol: float,
     h0: float,
     visualizer: bool,
+    method: str = "RK",
     output_dir=None,
+    show_full_trajectory: bool = False,
 ):
     problem = load_problem(problem_name)
     if problem.period is None:
         raise SystemExit(f"Orbit '{problem.name}' has no period; cannot use --t-mult")
 
     T = float(problem.period) * float(t_mult)
-    result = simulate(problem, (0.0, T), tol=float(tol), h0=float(h0))
+    match method:
+        case "RK":
+            result = simulate_rk(problem, (0.0, T), tol=float(tol), h0=float(h0))
+        case "BDF":
+            result = simulate_bdf(problem, (0.0, T), tol=float(tol), h0=float(h0))
+        case _:
+            raise ValueError(f"Unknown method: {method}")
 
     if output_dir is not None:
         out = Path(output_dir)
@@ -64,7 +72,13 @@ def run(
         print(f"Saved: {out}")
 
     if visualizer:
-        visualize(result.y, t=result.t, energy=result.energy, show_energy=(result.energy is not None))
+        visualize(
+            result.y,
+            t=result.t,
+            energy=result.energy,
+            show_energy=(result.energy is not None),
+            show_full_trajectory=bool(show_full_trajectory),
+        )
 
 
 def main() -> int:

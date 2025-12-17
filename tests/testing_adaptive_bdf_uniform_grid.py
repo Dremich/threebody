@@ -35,7 +35,7 @@ def test_bdf2_convergence():
         y_past = y_exact(t_past) # Scalar input
         
         # Take one step
-        y_next, err_est, _ = BDF_step(f, t_past, y_past, J_f, h)
+        y_next, err_est, _ = BDF_step(f, J_f, t_past, y_past, h)
         y_next = y_next[0]  # Scalar output
         err_est = err_est[0]  # Scalar output
         

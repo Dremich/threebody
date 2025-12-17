@@ -18,13 +18,13 @@ from .runge_kutta_integrators import (
 	rk_step_embedded,
 )
 
-from .implicit_integrators import implicit_midpoint_step
+from .implicit_integrators import BDF_step
 
 __all__ = [
 	"VectorField",
 	"EmbeddedRKTableau",
 	"dormand_prince54",
 	"rk_step_embedded",
-	"implicit_midpoint_step",
+	"BDF_step",
 ]
 

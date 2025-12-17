@@ -71,7 +71,7 @@ def test_variable_step_bdf2():
         y_past = y_exact(t_past)
         
         # 5. Run the Adaptive Step
-        y_next, err_est, _ = BDF_step(f, t_past, y_past, J_f, h)
+        y_next, err_est, _ = BDF_step(f, J_f, t_past, y_past, h)
         y_next = y_next[0]  # scalar
         err_est = err_est[0]  # scalar
         

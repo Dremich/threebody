@@ -4,7 +4,7 @@ Requirements:
 - Matplotlib + blitting (no matplotlib.animation.FuncAnimation)
 - One figure, three colored traces, fading trail
 - Optional energy/time panel
-- Controls: Space pause/play, arrows scrub, scroll zoom, r reset
+- Controls: Space pause/play, arrows scrub, scroll zoom, r reset, t toggle full trajectory
 - Headless frame rendering: render_frames(states, out_dir, dpi=300)
 
 This module is intentionally small and avoids framework-style abstractions.
@@ -171,6 +171,10 @@ class VisualizerConfig:
     glow_width_factor: float = 5
     glow_alpha_factor: float = 0.4
 
+    # If true, draw a thin colored line for the full trajectory behind the
+    # blitted trail/markers (helps see periodicity).
+    show_full_trajectory: bool = False
+
 
 class ThreeBodyVisualizer:
     """Blitted interactive viewer for three-body trajectories."""
@@ -226,8 +230,14 @@ class ThreeBodyVisualizer:
         self.config = config
         self.fixed_limits = bool(fixed_limits)
 
+        self._full_trajectory_visible = bool(getattr(config, "show_full_trajectory", False))
+
         self._paused = False
         self._i = 0
+        self._scrubbing_energy = False
+        self._playback_speed = 1.0
+        self._base_interval_ms: int | None = None
+        self._frames_per_tick = 1
 
         self._x, self._y = _extract_xy(self.states)
         self._xlim0, self._xlim1, self._ylim0, self._ylim1 = _limits_from_xy(self._x, self._y)
@@ -241,11 +251,13 @@ class ThreeBodyVisualizer:
 
         self._trail_collections = []
         self._trail_glow_collections = []
+        self._full_trajectory_lines = []
         self._markers = []
         self._glow_markers = []
         self._energy_line = None
         self._energy_marker = None
         self._time_text = None
+        self._speed_text = None
 
         self._timer = None
 
@@ -253,6 +265,83 @@ class ThreeBodyVisualizer:
         self._trail_alpha_lut = self._build_trail_alpha_lut()
         self._trail_core_rgb = None
         self._trail_glow_rgb = None
+
+    def _time_axis(self) -> np.ndarray:
+        return np.arange(self.n) if self.t is None else self.t
+
+    def _set_playback_speed(self, speed: float) -> None:
+        speed = float(speed)
+        if not np.isfinite(speed):
+            return
+        self._playback_speed = float(np.clip(speed, 0.1, 200.0))
+        self._apply_playback_rate()
+        self._update_speed_text()
+
+    def _apply_playback_rate(self) -> None:
+        """Apply playback speed using a hybrid approach.
+
+        - For speeds <= 1x: slow down by increasing the timer interval.
+        - For speeds > 1x: keep timer at base rate and advance multiple frames per tick.
+
+        This avoids the common high-speed plateau where timer interval hits a minimum,
+        and it makes fast playback less sensitive to non-uniform physical time spacing.
+        """
+        if self._timer is None or self._base_interval_ms is None:
+            return
+
+        s = float(self._playback_speed)
+        if s <= 1.0:
+            self._frames_per_tick = 1
+            interval_ms = max(1, int(round(float(self._base_interval_ms) / s)))
+        else:
+            self._frames_per_tick = max(1, int(round(s)))
+            interval_ms = int(self._base_interval_ms)
+
+        try:
+            self._timer.interval = interval_ms
+        except Exception:
+            try:
+                self._timer.set_interval(interval_ms)
+            except Exception:
+                pass
+
+    def _update_speed_text(self) -> None:
+        if self._speed_text is None:
+            return
+        # Fixed width prevents flicker.
+        self._speed_text.set_text(f"{self._playback_speed:6.2f}x")
+
+    def _apply_timer_interval(self) -> None:
+        # Back-compat alias for older calls.
+        self._apply_playback_rate()
+
+    def _index_from_time_x(self, x: float | None) -> int | None:
+        if x is None:
+            return None
+        x = float(x)
+        if not np.isfinite(x):
+            return None
+
+        if self.t is None:
+            return int(np.clip(int(np.round(x)), 0, self.n - 1))
+
+        tE = self.t
+        j = int(np.searchsorted(tE, x))
+        if j <= 0:
+            return 0
+        if j >= self.n:
+            return self.n - 1
+
+        # Nearest neighbor between j-1 and j.
+        return j if abs(tE[j] - x) < abs(x - tE[j - 1]) else (j - 1)
+
+    def _scrub_to_time_x(self, x: float | None) -> None:
+        i = self._index_from_time_x(x)
+        if i is None:
+            return
+        self._paused = True
+        self._draw_frame(i)
+        self._blit()
 
     def _set_dynamic_animated(self, animated: bool) -> None:
         """Toggle animated state of dynamic artists.
@@ -271,6 +360,8 @@ class ThreeBodyVisualizer:
             m.set_animated(animated)
         if self._time_text is not None:
             self._time_text.set_animated(animated)
+        if self._speed_text is not None:
+            self._speed_text.set_animated(animated)
         if self._energy_marker is not None:
             self._energy_marker.set_animated(animated)
 
@@ -299,6 +390,8 @@ class ThreeBodyVisualizer:
             m.set_visible(visible)
         if self._time_text is not None:
             self._time_text.set_visible(visible)
+        if self._speed_text is not None:
+            self._speed_text.set_visible(visible)
         if self._energy_marker is not None:
             self._energy_marker.set_visible(visible)
 
@@ -344,6 +437,21 @@ class ThreeBodyVisualizer:
 
         # Bright colors that read on black.
         colors = ["#00D1FF", "#FF4D9D", "#9DFF00"]
+
+        # Full trajectory backdrop (static; included in background). We always
+        # create these lines so the user can toggle them with a hotkey.
+        full_lw = max(0.5, 0.75 * float(self.config.line_width))
+        for k in range(3):
+            (line,) = ax.plot(
+                self._x[:, k],
+                self._y[:, k],
+                color=colors[k],
+                linewidth=full_lw,
+                alpha=0.6,
+                zorder=-1,
+                visible=bool(self._full_trajectory_visible),
+            )
+            self._full_trajectory_lines.append(line)
         # Cache RGB for fast per-frame coloring.
         # Trail core is always white; glow is per-body.
         self._trail_core_rgb = np.array([1.0, 1.0, 1.0], dtype=float)
@@ -426,6 +534,20 @@ class ThreeBodyVisualizer:
         )
         self._time_text.set_animated(True)
 
+        # Playback speed readout (top-right).
+        self._speed_text = ax.text(
+            0.99,
+            0.99,
+            "",
+            transform=ax.transAxes,
+            va="top",
+            ha="right",
+            fontsize=10,
+            color="white",
+        )
+        self._speed_text.set_animated(True)
+        self._update_speed_text()
+
         if self.show_energy and axE is not None:
             axE.set_facecolor("black")
             axE.set_xlabel("t")
@@ -450,10 +572,15 @@ class ThreeBodyVisualizer:
         fig.canvas.mpl_connect("key_press_event", self._on_key)
         fig.canvas.mpl_connect("scroll_event", self._on_scroll)
         fig.canvas.mpl_connect("resize_event", self._on_resize)
+        fig.canvas.mpl_connect("button_press_event", self._on_mouse_press)
+        fig.canvas.mpl_connect("motion_notify_event", self._on_mouse_move)
+        fig.canvas.mpl_connect("button_release_event", self._on_mouse_release)
 
         # Timer for playback
-        interval_ms = max(1, int(1000.0 / float(self.config.fps)))
+        interval_ms = max(1, int(round(1000.0 / float(self.config.fps))))
+        self._base_interval_ms = interval_ms
         self._timer = fig.canvas.new_timer(interval=interval_ms)
+        self._apply_playback_rate()
         self._timer.add_callback(self._on_timer)
 
         # Capture a background that does not include dynamic artists (time text,
@@ -556,9 +683,10 @@ class ThreeBodyVisualizer:
 
         if self._time_text is not None:
             if self.t is None:
-                self._time_text.set_text(f"frame {i+1}/{self.n}")
+                self._time_text.set_text(f"frame {i+1:6d}/{self.n:6d}")
             else:
-                self._time_text.set_text(f"t = {self.t[i]:.6g}   ({i+1}/{self.n})")
+                # Fixed-width formatting prevents text reflow/flicker.
+                self._time_text.set_text(f"t = {self.t[i]:12.6f}   ({i+1:6d}/{self.n:6d})")
 
         if self.show_energy and self._axE is not None and self._energy_marker is not None:
             tE = np.arange(self.n) if self.t is None else self.t
@@ -584,6 +712,8 @@ class ThreeBodyVisualizer:
             self._ax.draw_artist(m)
         if self._time_text is not None:
             self._ax.draw_artist(self._time_text)
+        if self._speed_text is not None:
+            self._ax.draw_artist(self._speed_text)
 
         canvas.blit(self._ax.bbox)
 
@@ -599,9 +729,32 @@ class ThreeBodyVisualizer:
 
     # ------------------------- Interaction -------------------------
 
+    def _on_mouse_press(self, event) -> None:
+        if not self.show_energy or self._axE is None:
+            return
+        if event.inaxes != self._axE:
+            return
+        if getattr(event, "button", None) != 1:
+            return
+
+        self._scrubbing_energy = True
+        self._scrub_to_time_x(getattr(event, "xdata", None))
+
+    def _on_mouse_move(self, event) -> None:
+        if not self._scrubbing_energy:
+            return
+        if not self.show_energy or self._axE is None:
+            return
+        # During a drag, Matplotlib may report inaxes=None if cursor leaves.
+        self._scrub_to_time_x(getattr(event, "xdata", None))
+
+    def _on_mouse_release(self, event) -> None:
+        if getattr(event, "button", None) == 1:
+            self._scrubbing_energy = False
+
     def _on_timer(self) -> None:
         if not self._paused:
-            self._i = (self._i + 1) % self.n
+            self._i = (self._i + int(self._frames_per_tick)) % self.n
             self._draw_frame(self._i)
             self._blit()
 
@@ -616,6 +769,17 @@ class ThreeBodyVisualizer:
     def _on_key(self, event) -> None:
         if event.key == " ":
             self._paused = not self._paused
+            return
+
+        if event.key == "t":
+            self._full_trajectory_visible = not self._full_trajectory_visible
+            for line in self._full_trajectory_lines:
+                line.set_visible(bool(self._full_trajectory_visible))
+            if self._fig is not None:
+                self._fig.canvas.draw()
+                self._capture_backgrounds()
+            self._draw_frame(self._i)
+            self._blit()
             return
 
         if event.key == "right":
@@ -650,6 +814,16 @@ class ThreeBodyVisualizer:
                 self._fig.canvas.draw()
                 self._capture_backgrounds()
             self._blit()
+            return
+
+        # Playback speed control
+        # Matplotlib key names vary by backend/keyboard layout, so accept a few.
+        if event.key in {"+", "=", "plus", "kp_add"}:
+            self._set_playback_speed(self._playback_speed * 1.25)
+            return
+
+        if event.key in {"-", "_", "minus", "kp_subtract"}:
+            self._set_playback_speed(self._playback_speed / 1.25)
             return
 
     def _on_scroll(self, event) -> None:
@@ -750,9 +924,10 @@ def visualize(
     show_energy: bool = False,
     trail_len: int = 30,
     fps: float = 120.0,
+    show_full_trajectory: bool = False,
 ) -> None:
     """Convenience wrapper to launch the interactive visualizer."""
-    cfg = VisualizerConfig(trail_len=int(trail_len), fps=float(fps))
+    cfg = VisualizerConfig(trail_len=int(trail_len), fps=float(fps), show_full_trajectory=bool(show_full_trajectory))
     ThreeBodyVisualizer(t, states, energy=energy, show_energy=show_energy, config=cfg).show()
 
 

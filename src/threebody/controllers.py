@@ -38,7 +38,7 @@ class ControllerState:
 	prev_h: float | None = None
 
 
-def scaled_rms_error_norm(err: np.ndarray, y: np.ndarray, y_trial: np.ndarray, *, atol: float, rtol: float) -> float:
+def scaled_rms_error_norm(err: np.ndarray, y: np.ndarray, y_trial: np.ndarray, *, atol: float, rtol: float, h: float) -> float:
 	"""Compute a scalar error norm used for accept/reject.
 
 	Uses an RMS norm with componentwise scaling:
@@ -54,13 +54,17 @@ def scaled_rms_error_norm(err: np.ndarray, y: np.ndarray, y_trial: np.ndarray, *
 	if err.ndim != 1:
 		raise ValueError("Expected 1D state vectors")
 
-	scale = float(atol) + float(rtol) * np.maximum(np.abs(y), np.abs(y_trial))
+	max_allowed_error = float(atol) + float(rtol) * np.maximum(np.abs(y), np.abs(y_trial))
 	# Avoid division by zero if atol=rtol=0.
-	scale = np.maximum(scale, np.finfo(float).tiny)
-	z = err / scale
+	scale = np.maximum(max_allowed_error, np.finfo(float).tiny)
+
+	if h == 0.0:
+		z = err / max_allowed_error
+	else: 
+		z = err / (h * max_allowed_error)
 	return float(np.sqrt(np.mean(z * z)))
 
-def max_error_norm(err: np.ndarray, y: np.ndarray, y_trial: np.ndarray, *, atol: float, rtol: float) -> float:
+def max_error_norm(err: np.ndarray, y: np.ndarray, y_trial: np.ndarray, *, atol: float, rtol: float, h: float) -> float:
     """Computes a scalar error norm used to determine whether to accept/reject y_trial.
     y_trial is accepted when err_norm <= 1.
 
@@ -69,13 +73,13 @@ def max_error_norm(err: np.ndarray, y: np.ndarray, y_trial: np.ndarray, *, atol:
         err_norm = max( |err_i| / err_limit )
     """
     # Standard error check using scale term with max y
-    scale = atol + rtol * np.maximum(np.abs(y), np.abs(y_trial))
+    max_allowed_error = atol + rtol * np.maximum(np.abs(y), np.abs(y_trial))
     
     # Check for division by zero
-    scale = np.maximum(scale, np.finfo(float).tiny)
+    max_allowed_error = np.maximum(max_allowed_error, np.finfo(float).tiny)
     
     # Compute max norm of error ratio
-    error_ratio = np.abs(err) / scale
+    error_ratio = np.abs(err) / h / max_allowed_error
     return float(np.max(error_ratio))
 
 class StepSizeController(Protocol):
@@ -101,59 +105,6 @@ class StepSizeController(Protocol):
 	def propose_step_size(self, *, h: float, err_norm: float, accepted: bool) -> float:
 		...
 
-@dataclass
-class RKAdaptiveController:
-	"""Simple, robust step-size controller for embedded explicit RK.
-
-	Uses a classic one-step controller:
-		factor = safety * err_norm^(-1/(order+1))
-	with clipping to [min_factor, max_factor].
-	"""
-
-	order: int
-	config: ControllerConfig = ControllerConfig()
-
-	def error_norm(
-		self,
-		*,
-		t: float,
-		y: np.ndarray,
-		y_trial: np.ndarray,
-		err: np.ndarray,
-	) -> float:
-		return scaled_rms_error_norm(
-			err,
-			y,
-			y_trial,
-			atol=self.config.atol,
-			rtol=self.config.rtol,
-		)
-
-	def accept(self, *, err_norm: float) -> bool:
-		return float(err_norm) <= 1.0
-
-	def propose_step_size(self, *, h: float, err_norm: float, accepted: bool) -> float:
-		h = float(h)
-		err = float(err_norm)
-
-		if err <= 0.0:
-			factor = self.config.max_factor
-		else:
-			exponent = -1.0 / float(self.order + 1)
-			factor = self.config.safety * (err ** exponent)
-
-		factor = float(np.clip(factor, self.config.min_factor, self.config.max_factor))
-
-		# If rejected, always reduce (even if computed factor was >1 due to err<1).
-		if not accepted:
-			factor = min(factor, 1.0)
-
-		h_new = h * factor
-		# Preserve direction.
-		if h_new == 0.0:
-			h_new = np.copysign(np.finfo(float).tiny, h)
-
-		return float(h_new)
 
 @dataclass
 class AdaptiveController:
@@ -163,24 +114,21 @@ class AdaptiveController:
     order: int
     config: ControllerConfig = ControllerConfig()
 
-    def error_norm(self, *, t: float, y: np.ndarray, y_trial: np.ndarray, err: np.ndarray) -> float:
-        return max_error_norm(err, y, y_trial, atol=self.config.atol, rtol=self.config.rtol)
+    def error_norm(self, *, t: float, y: np.ndarray, y_trial: np.ndarray, err: np.ndarray, h: float) -> float:
+        return scaled_rms_error_norm(err, y, y_trial, atol=self.config.atol, rtol=self.config.rtol, h=h)
 
     def accept(self, *, err_norm: float) -> bool:
         return err_norm <= 1.0
 
     def propose_step_size(self, *, h: float, err_norm: float, accepted: bool) -> float:
         # Classic controller (simple, robust):
-        #   factor = safety * err_norm^(-1/(order+1))
+        #   factor = safety * err_norm^(1/(order+1))
         #   factor clipped to [min_factor, max_factor]
         # Use order = embedded_low_order (the order of the error estimate).
-        
-        # TODO: UPDATE THIS TO USE ERR_NORM
-        # TODO: IMPLEMENT ITERATIVE CONTROLLER
-        # TODO: CREATE 2 MORE PROBLEMS
-        # TODO: WRITE REPORT
-        # Adjust step size based on error rate
-        rate_ratio = (max_error_rate / error_rate)**(1/(order + 1))  # Adjust step size based on error rate
-        h = h * min(5, max(0.2, safety * np.min(rate_ratio)))  # Limit step size changes to factor of 5 increase or 0.2 decrease
-        
 
+        # Adjust step size based on error rate
+        safety = 0.9
+        ratio_pow = err_norm ** (-1 / (self.order + 1))  # Adjust step size based on error rate
+        h_new = h * min(5, max(0.2, safety * np.min(ratio_pow)))  # Limit step size changes to factor of 5 increase or 0.2 decrease
+        
+        return h_new

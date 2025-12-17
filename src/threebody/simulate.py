@@ -22,7 +22,17 @@ import numpy as np
 
 
 VectorField = Callable[[float, np.ndarray], np.ndarray]
-Stepper = Callable[[VectorField, float, np.ndarray, float], Tuple[np.ndarray, np.ndarray, int]]
+JacobianField = Callable[[float, np.ndarray], np.ndarray]
+
+# Adaptive steppers may be one-step (RK) or multistep (BDF/Adams). To support
+# multistep methods, the stepper receives the full accepted history.
+Stepper = Callable[
+    [VectorField, JacobianField | None, Sequence[float], Sequence[np.ndarray], float],
+    Tuple[np.ndarray, np.ndarray, int],
+]
+
+# Used only for bootstrapping history points (explicit one-step method).
+BootstrapStepper = Callable[[VectorField, float, np.ndarray, float], Tuple[np.ndarray, int]]
 EnergyFn = Callable[[np.ndarray], float]
 
 
@@ -44,6 +54,7 @@ class StepSizeController(Protocol):
         y: np.ndarray,
         y_trial: np.ndarray,
         err: np.ndarray,
+        h: float,
     ) -> float:
         ...
 
@@ -70,9 +81,11 @@ def simulate_adaptive(
     y0: np.ndarray,
     t_span: Sequence[float],
     *,
+    J_fy: VectorField | None = None,
     h0: float,
     stepper: Stepper,
     controller: StepSizeController,
+    history: tuple[Sequence[float], np.ndarray] | None = None,
     energy_fn: EnergyFn | None = None,
     max_steps: int = 1_000_000,
 ) -> SimulationResult:
@@ -80,10 +93,12 @@ def simulate_adaptive(
 
     Args:
         f: Vector field f(t, y).
+        J_fy: Jacobian of f with respect to y, for implicit solvers.
         y0: Initial state (1D array).
         t_span: (t0, t1).
         h0: Initial step size magnitude.
-        stepper: Embedded step function returning (y_trial, err, nfev).
+        stepper: Step function returning (y_trial, err, nfev). For multistep
+            methods, the stepper can use the full accepted history.
         controller: Adaptive step-size controller.
         energy_fn: Optional energy function E(y) for diagnostics.
         max_steps: Hard limit on accepted steps.
@@ -125,19 +140,33 @@ def simulate_adaptive(
     t = t0
     h = direction * float(h0)
 
-    t_hist: list[float] = [t]
+    # Accepted history (can be pre-populated for multistep methods).
+    t_hist: list[float] = [float(t0)]
     y_hist: list[np.ndarray] = [y.copy()]
     h_hist: list[float] = []
     nfev_hist: list[int] = []
     err_hist: list[float] = []
 
+    if history is not None:
+        t_hist = history[0]
+        y_hist = (history[1])
+        t = float(t_hist[-1])
+        y = np.asarray(y_hist[-1], dtype=float)
+
+        # Populate diagnostics for the pre-accepted history so arrays align.
+        if len(t_hist) >= 2:
+            dt = np.diff(np.asarray(t_hist, dtype=float))
+            h_hist = [float(x) for x in dt]
+            nfev_hist = [0 for _ in range(dt.size)]
+            err_hist = [float("nan") for _ in range(dt.size)]
+
     e0 = None
     e_hist: list[float] = []
     if energy_fn is not None:
-        e0 = float(energy_fn(y))
-        e_hist.append(e0)
+        e_hist = [float(energy_fn(yi)) for yi in y_hist]
+        e0 = float(e_hist[0])
 
-    n_accepted = 0
+    n_accepted = max(0, len(t_hist) - 1)
     # Main loop: accept/reject steps until reaching t1.
     while (t - t1) * direction < 0.0:
         if n_accepted >= max_steps:
@@ -151,9 +180,9 @@ def simulate_adaptive(
         if h == 0.0:
             raise RuntimeError("Step size underflow (h==0)")
 
-        y_trial, err, nfev = stepper(f, t, y, h)
+        y_trial, err, nfev = stepper(f, J_fy, t_hist, y_hist, h)
         err_norm = float(
-            controller.error_norm(t=t, y=y, y_trial=y_trial, err=np.asarray(err, dtype=float))
+            controller.error_norm(t=t, y=y, y_trial=y_trial, err=np.asarray(err, dtype=float), h=h)
         )
         accepted = bool(controller.accept(err_norm=err_norm))
 
@@ -198,7 +227,7 @@ def simulate_adaptive(
     )
 
 
-def simulate(
+def simulate_rk(
     problem,
     t_span: Sequence[float],
     *,
@@ -206,26 +235,27 @@ def simulate(
     h0: float = 1e-3,
     max_steps: int = 1_000_000,
 ) -> SimulationResult:
-    """Convenience wrapper to simulate a `ThreeBodyProblem` with sensible defaults.
+    """Convenience wrapper to simulate a `ThreeBodyProblem` with using 
+    embedded Runge-Kutta with sensible defaults.
 
     Scripts are expected to call this function and should not import numerical
     modules like integrators/controllers/dynamics directly.
     """
     # Local imports keep the core adaptive driver physics-agnostic.
-    from .controllers import ControllerConfig, RKAdaptiveController
+    from .controllers import ControllerConfig, AdaptiveController
     from .dynamics import DynamicsParams, energy as _energy, rhs as _rhs
     from .integrators import dormand_prince54, rk_step_embedded
 
     tableau = dormand_prince54()
 
     # For dormand_prince5(4): error is O(h^(order_low+1)).
-    controller = RKAdaptiveController(
+    controller = AdaptiveController(
         order=int(tableau.order_low),
         config=ControllerConfig(rtol=float(tol), atol=float(tol)),
     )
 
-    def stepper(f: VectorField, t: float, y: np.ndarray, h: float):
-        return rk_step_embedded(f, t, y, h, tableau)
+    def stepper(f: VectorField, J_fy: VectorField, t: list[np.ndarray], y: list[np.ndarray], h: float):
+        return rk_step_embedded(f, t[-1], y[-1], h, tableau)
 
     params = DynamicsParams(G=float(getattr(problem, "G", 1.0)), masses=np.asarray(problem.masses, dtype=float))
 
@@ -242,6 +272,72 @@ def simulate(
         h0=float(h0),
         stepper=stepper,
         controller=controller,
+        energy_fn=E,
+        max_steps=int(max_steps),
+    )
+
+
+def simulate_bdf(
+    problem,
+    t_span: Sequence[float],
+    *,
+    tol: float = 1e-10,
+    h0: float = 1e-3,
+    max_steps: int = 1_000_000,
+) -> SimulationResult:
+    """Convenience wrapper to simulate a `ThreeBodyProblem` with using 
+    backward differentiation formula (BDF) methods with sensible defaults.
+
+    Scripts are expected to call this function and should not import numerical
+    modules like integrators/controllers/dynamics directly.
+    """
+    # Local imports keep the core adaptive driver physics-agnostic.
+    from .controllers import ControllerConfig, AdaptiveController
+    from .dynamics import DynamicsParams, energy as _energy, rhs as _rhs, jacobian as J_fy
+    from .integrators import BDF_step, dormand_prince54, rk_step_embedded
+    
+    # Use order 5 w/ 5th order explicit startup.
+    controller = AdaptiveController(
+        order=5,
+        config=ControllerConfig(rtol=float(tol), atol=float(tol)),
+    )
+
+    def stepper(f: VectorField, J_fy: VectorField, t: list[np.ndarray], y: list[np.ndarray], h: float):
+        t_past = np.array(t[-controller.order:], dtype=float)
+        y_past = np.column_stack(y[-controller.order:]).astype(float, copy=False)
+        return BDF_step(f, J_fy, t_past, y_past, h)
+
+    params = DynamicsParams(G=float(getattr(problem, "G", 1.0)), masses=np.asarray(problem.masses, dtype=float))
+
+    def f(t: float, y: np.ndarray) -> np.ndarray:
+        return _rhs(t, y, params=params)
+
+    def E(y: np.ndarray) -> float:
+        return float(_energy(y, params=params))
+
+    # Build startup history: need (order+1) points total.
+    tableau = dormand_prince54()
+    h = h0
+    t_init: list[float] = [t_span[0]]
+    y_init: list[np.ndarray] = [np.asarray(problem.y0, dtype=float)]
+    while len(t_init) < controller.order + 1:
+        y_next, _err, _nfev = rk_step_embedded(f, t_init[-1], y_init[-1], h, tableau)
+        err_norm = controller.error_norm(t=t_init[-1], y=y_init[-1], y_trial=y_next, err=_err, h=h)
+        if controller.accept(err_norm=err_norm):
+            t_init.append(float(t_init[-1] + h))
+            y_init.append(np.asarray(y_next, dtype=float))
+        
+        h = controller.propose_step_size(h=h, err_norm=err_norm, accepted=True)
+
+    return simulate_adaptive(
+        f,
+        np.asarray(problem.y0, dtype=float),
+        t_span,
+        J_fy=J_fy,
+        h0=float(h0),
+        stepper=stepper,
+        controller=controller,
+        history=(t_init, y_init),
         energy_fn=E,
         max_steps=int(max_steps),
     )

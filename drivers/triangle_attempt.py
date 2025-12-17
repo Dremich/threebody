@@ -10,7 +10,7 @@ from run_orbit import run
 
 run(
     problem_name="triangle_attempt",
-    t_mult=1.0,
+    t_mult=10.0,
     tol=1e-10,
     h0=1e-3,
     visualizer=True,        # critical for tests

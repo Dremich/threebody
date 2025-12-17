@@ -1,0 +1,32 @@
+{
+  "name": "butterfly_I",
+  "G": 1.0,
+  "masses": [
+    1.0,
+    1.0,
+    1.0
+  ],
+  "initial_state": [
+    -1.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.30689,
+    0.12551,
+    0.0,
+    0.30689,
+    0.12551,
+    0.0,
+    -0.61378,
+    -0.25102,
+    0.0
+  ],
+  "period": 6.2356,
+  "description": "Suvakov-Dmitrasinovic butterfly I periodic orbit",
+  "reference": "http://dx.doi.org/10.1103/PhysRevLett.110.114301"
+}
