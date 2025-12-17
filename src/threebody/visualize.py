@@ -5,6 +5,7 @@ Requirements:
 - One figure, three colored traces, fading trail
 - Optional energy/time panel
 - Controls: Space pause/play, arrows scrub, scroll zoom, r reset, t toggle full trajectory
+- Controls: Space pause/play, arrows scrub, scroll zoom, r reset, t toggle full trajectory, Ctrl+C save GIF, Ctrl+P save trajectory-only GIF
 - Headless frame rendering: render_frames(states, out_dir, dpi=300)
 
 This module is intentionally small and avoids framework-style abstractions.
@@ -12,7 +13,8 @@ This module is intentionally small and avoids framework-style abstractions.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, Sequence, Tuple
 
@@ -770,6 +772,24 @@ class ThreeBodyVisualizer:
         if event.key == " ":
             self._paused = not self._paused
             return
+        # Save a GIF of the next full loop with current visual settings.
+        if event.key in {"ctrl+c", "control+c", "cmd+c"}:
+            try:
+                out = self.save_next_period_gif()
+                print(f"Saved GIF: {out}")
+            except Exception as e:
+                print(f"GIF save failed: {e}")
+            return
+
+        # Save a trajectory-only GIF (no energy subplot), matching current view.
+        if event.key in {"ctrl+p", "control+p", "cmd+p"}:
+            try:
+                out = self.save_next_period_gif(include_energy=False)
+                print(f"Saved GIF: {out}")
+            except Exception as e:
+                print(f"GIF save failed: {e}")
+            return
+
 
         if event.key == "t":
             self._full_trajectory_visible = not self._full_trajectory_visible
@@ -914,6 +934,139 @@ class ThreeBodyVisualizer:
         rgb = np.ascontiguousarray(buf[..., :3])
         self._set_dynamic_animated(True)
         return rgb
+
+    def save_next_period_gif(self, path: Path | str | None = None, *, include_energy: bool = True) -> Path:
+        """Save the next full loop of the visualizer as a GIF.
+
+        The saved output matches what you see: current axis limits (zoom/pan),
+        current trail/glow configuration, and current playback speed.
+
+        Returns:
+            Path to the written GIF.
+        """
+        if self._fig is None:
+            self._build_figure()
+
+        # Freeze interactive playback during export.
+        paused0 = bool(self._paused)
+        i0 = int(self._i)
+        self._paused = True
+
+        # Output location.
+        if path is None:
+            out_dir = Path("renders")
+            out_dir.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            path = out_dir / f"capture_{stamp}.gif"
+
+        out_gif = Path(path)
+        out_gif.parent.mkdir(parents=True, exist_ok=True)
+
+        # Determine which frames are actually being shown at current speed.
+        # - For speed <= 1x, we slow down the timer interval (same frame sequence).
+        # - For speed > 1x, we advance multiple frames per tick.
+        if float(self._playback_speed) <= 1.0:
+            stride = 1
+            fps_out = float(self.config.fps) * float(self._playback_speed)
+        else:
+            stride = max(1, int(self._frames_per_tick))
+            fps_out = float(self.config.fps)
+
+        fps_out = float(np.clip(fps_out, 1.0, 200.0))
+
+        # Number of ticks needed to traverse one full stored period.
+        n_ticks = int(np.ceil(self.n / stride))
+        indices = [(i0 + k * stride) % self.n for k in range(n_ticks)]
+
+        # Use imageio_ffmpeg to locate/provide ffmpeg.
+        import subprocess
+
+        try:
+            import imageio_ffmpeg
+
+            ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+        except Exception as e:
+            raise RuntimeError(
+                "imageio-ffmpeg is required to save GIFs. Install with: pip install imageio-ffmpeg"
+            ) from e
+
+        # Choose a renderer. If the interactive view includes an energy subplot
+        # but the user requests a trajectory-only export, render via a temporary
+        # visualizer without the energy axis.
+        renderer = self
+        if (not include_energy) and bool(self.show_energy):
+            cfg2 = replace(self.config, show_full_trajectory=bool(self._full_trajectory_visible))
+            renderer = ThreeBodyVisualizer(
+                self.t,
+                self.states,
+                energy=None,
+                show_energy=False,
+                config=cfg2,
+                fixed_limits=False,
+            )
+            renderer._build_figure()
+            if self._ax is not None and renderer._ax is not None:
+                renderer._ax.set_xlim(self._ax.get_xlim())
+                renderer._ax.set_ylim(self._ax.get_ylim())
+
+        # Prime one frame to get dimensions.
+        rgb0 = renderer.render_frame_rgb(indices[0])
+        h, w, _ = rgb0.shape
+
+        cmd = [
+            ffmpeg,
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-nostats",
+            "-f",
+            "rawvideo",
+            "-vcodec",
+            "rawvideo",
+            "-pix_fmt",
+            "rgb24",
+            "-s",
+            f"{w}x{h}",
+            "-r",
+            str(float(fps_out)),
+            "-i",
+            "-",
+            "-filter_complex",
+            "[0:v]split[s0][s1];[s0]palettegen=stats_mode=diff:max_colors=256[p];[s1][p]paletteuse=dither=none",
+            "-loop",
+            "0",
+            str(out_gif),
+        ]
+
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        assert proc.stdin is not None
+        try:
+            proc.stdin.write(rgb0.tobytes())
+            for idx in indices[1:]:
+                rgb = renderer.render_frame_rgb(idx)
+                if rgb.shape[0] != h or rgb.shape[1] != w:
+                    raise RuntimeError("Frame size changed during rendering; cannot stream to ffmpeg")
+                proc.stdin.write(rgb.tobytes())
+        finally:
+            try:
+                proc.stdin.close()
+            except Exception:
+                pass
+
+        rc = proc.wait()
+        if rc != 0:
+            raise RuntimeError(f"ffmpeg failed with exit code {rc}")
+
+        # Restore interactive state.
+        self._paused = paused0
+        self._draw_frame(i0)
+        if self._fig is not None:
+            # Re-capture clean backgrounds in case the full draws disturbed blitting.
+            self._fig.canvas.draw()
+            self._capture_backgrounds()
+        self._blit()
+        return out_gif
 
 
 def visualize(

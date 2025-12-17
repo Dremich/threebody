@@ -13,7 +13,7 @@ from src.threebody.visualize import visualize
 
 ## THIS SCRIPT VISUALIZES THE OUTPUT OF A PREVIOUSLY SOLVED PROBLEM, SAVED IN DATA/COMPUTATIONS 
 
-datastr = "goggles_RK" # name of problem, without .npz. Example: "figure_eight_RK"
+datastr = "figure_eight_BDF" # name of problem, without .npz. Example: "figure_eight_RK"
 
 ##############################################################################################
 

@@ -18,7 +18,7 @@ This periodic orbit (Suvakov-Dmitrasinovic I) is notoriously unstable. Standard 
 
 | **Simulation** | **Phase Space** |
 |:---:|:---:|
-| ![Butterfly Orbit Animation](renders/butterfly_I_RK.gif) | ![Butterfly Phase Plot](renders/figure_eight.gif) |
+| ![Butterfly Orbit Animation](renders/interactive_I_figure8.gif) | ![Butterfly Phase Plot](renders/interactive_II_moth.gif) |
 | *Evolution of the 3-body system over 6 periods.* | *Phase space trajectory showing conservation of structure.* |
 
 ### Solver Statistics
