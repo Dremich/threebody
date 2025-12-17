@@ -122,13 +122,16 @@ class AdaptiveController:
 
     def propose_step_size(self, *, h: float, err_norm: float, accepted: bool) -> float:
         # Classic controller (simple, robust):
-        #   factor = safety * err_norm^(1/(order+1))
+        #   factor = safety * err_norm^(-1/(order+1))
         #   factor clipped to [min_factor, max_factor]
         # Use order = embedded_low_order (the order of the error estimate).
 
-        # Adjust step size based on error rate
-        safety = 0.9
-        ratio_pow = err_norm ** (-1 / (self.order + 1))  # Adjust step size based on error rate
-        h_new = h * min(5, max(0.2, safety * np.min(ratio_pow)))  # Limit step size changes to factor of 5 increase or 0.2 decrease
-        
-        return h_new
+        if np.abs(err_norm) < 1e-20:
+            return h * self.config.max_factor
+
+        # Adjust step size based on error rate.
+        # Smaller err_norm -> increase h; larger err_norm -> decrease h.
+        safety = float(self.config.safety)
+        factor = safety * float(err_norm) ** (-1.0 / (self.order + 1))
+        factor = float(np.clip(factor, self.config.min_factor, self.config.max_factor))
+        return h * factor

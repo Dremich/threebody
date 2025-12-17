@@ -62,6 +62,12 @@ def list_orbits() -> List[str]:
         return []
     return sorted(p.stem for p in root.glob("*.json") if p.is_file())
 
+def list_computed_orbits() -> List[str]:
+    """List available computed orbit names (derived from JSON filenames)."""
+    root = _repo_root() / "data" / "computations"
+    if not root.exists():
+        return []
+    return sorted(p.stem for p in root.glob("*.npz") if p.is_file())
 
 def _as_float_array(x: Any, *, name: str) -> np.ndarray:
     try:
@@ -156,7 +162,7 @@ def _parse_problem_dict(d: Dict[str, Any], *, fallback_name: str) -> ThreeBodyPr
 
 
 def load_orbit(name: str) -> ThreeBodyProblem:
-    """Load an orbit definition from `data/orbits/{name}.json`."""
+    """Load an orbit definition from `data/orbit/{name}.json`."""
     if not isinstance(name, str) or not name:
         raise ValueError("name must be a non-empty string")
 

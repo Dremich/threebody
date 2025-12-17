@@ -1,0 +1,5 @@
+title: Adaptive BDF Solver
+description: Robust N-Body integration using implicit methods and singularity softening.
+theme: jekyll-theme-minimal
+show_downloads: true
+google_analytics:

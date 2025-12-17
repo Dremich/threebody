@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import sys
+import time
 
 # Allow running directly from a src-layout repo without installation.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -49,6 +50,8 @@ def run(
         raise SystemExit(f"Orbit '{problem.name}' has no period; cannot use --t-mult")
 
     T = float(problem.period) * float(t_mult)
+    
+    start_time = time.perf_counter()
     match method:
         case "RK":
             result = simulate_rk(problem, (0.0, T), tol=float(tol), h0=float(h0))
@@ -56,6 +59,7 @@ def run(
             result = simulate_bdf(problem, (0.0, T), tol=float(tol), h0=float(h0))
         case _:
             raise ValueError(f"Unknown method: {method}")
+    end_time = time.perf_counter()
 
     if output_dir is not None:
         out = Path(output_dir)
@@ -68,6 +72,8 @@ def run(
             h=result.h,
             err_norm=result.err_norm,
             nfev=result.nfev,
+            nstepper=result.nstepper,
+            time_elapsed=end_time - start_time,
         )
         print(f"Saved: {out}")
 
@@ -79,6 +85,20 @@ def run(
             show_energy=(result.energy is not None),
             show_full_trajectory=bool(show_full_trajectory),
         )
+        
+    print(f"Solved {problem_name} using {method} in {end_time - start_time:.6f} seconds")
+    print(f"Initial state: {result.y[0]}")
+    print(f"Final state: {result.y[-1]}\n")
+    print(f"Initial energy: {result.energy[0] if result.energy is not None else 'N/A'}")
+    print(f"Final energy: {result.energy[-1] if result.energy is not None else 'N/A'}")
+    print(f"Energy drift: {result.energy[-1] - result.energy[0] if result.energy is not None else 'N/A'}\n")
+
+    if method == "RK":    
+        print("Total function evaluations (RK):", result.nfev)
+        print("Total attempted steps (RK):", result.nstepper)
+    else:
+        print("Total number of Newton Raphson evaluations (BDF):", result.nfev)
+        print("Total attempted steps (BDF):", result.nstepper)
 
 
 def main() -> int:

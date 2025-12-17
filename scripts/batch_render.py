@@ -15,13 +15,12 @@ from pathlib import Path
 import sys
 
 # Allow running directly from a src-layout repo without installation.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import numpy as np
 
-from threebody.problems import list_orbits, load_problem
-from threebody.simulate import simulate
-from threebody.visualize import render_gif_ffmpeg
+from src.threebody.problems import list_computed_orbits
+from src.threebody.visualize import render_gif_ffmpeg
 
 
 def _parse_args() -> argparse.Namespace:
@@ -55,7 +54,7 @@ def _sample_uniform_in_time(t: np.ndarray, y: np.ndarray, n_frames: int) -> np.n
 def main() -> int:
     args = _parse_args()
 
-    orbit_names = args.orbits if args.orbits else list_orbits()
+    orbit_names = args.orbits if args.orbits else list_computed_orbits()
     if not orbit_names:
         raise SystemExit("No orbit definitions found")
 
@@ -63,15 +62,20 @@ def main() -> int:
     out_root.mkdir(parents=True, exist_ok=True)
 
     for name in orbit_names:
-        problem = load_problem(name)
-        if problem.period is None:
-            print(f"Skipping {name}: missing period")
-            continue
+        datapath = Path(f"data/computations/{name}.npz")
+        data = np.load(datapath)
+        
+        # Unpack data
+        t = data['t']
+        y = data['y']
+        energy = data['energy']
+        nfev = data['nfev']
+        nstepper = data['nstepper']
+        time_elapsed = data.get('time_elapsed', 0.0)
+        if energy.size == 0:
+                energy = None
 
-        T = float(problem.period)
-        result = simulate(problem, (0.0, T), tol=float(args.tol), h0=float(args.h0))
-
-        sampled_states = _sample_uniform_in_time(result.t, result.y, int(args.frames))
+        sampled_states = _sample_uniform_in_time(t, y, int(args.frames))
 
         out_gif = out_root / f"{name}.gif"
         render_gif_ffmpeg(sampled_states, out_gif, fps=float(args.fps), dpi=150)

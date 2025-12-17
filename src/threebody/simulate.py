@@ -9,7 +9,7 @@ Recorded diagnostics:
 - time points
 - states
 - accepted step sizes
-- RHS evaluation counts
+- total RHS evaluation count (includes rejected steps)
 - optional energy + drift from initial value
 """
 
@@ -22,17 +22,7 @@ import numpy as np
 
 
 VectorField = Callable[[float, np.ndarray], np.ndarray]
-JacobianField = Callable[[float, np.ndarray], np.ndarray]
-
-# Adaptive steppers may be one-step (RK) or multistep (BDF/Adams). To support
-# multistep methods, the stepper receives the full accepted history.
-Stepper = Callable[
-    [VectorField, JacobianField | None, Sequence[float], Sequence[np.ndarray], float],
-    Tuple[np.ndarray, np.ndarray, int],
-]
-
-# Used only for bootstrapping history points (explicit one-step method).
-BootstrapStepper = Callable[[VectorField, float, np.ndarray, float], Tuple[np.ndarray, int]]
+Stepper = Callable[[VectorField, float, np.ndarray, float], Tuple[np.ndarray, np.ndarray, int]]
 EnergyFn = Callable[[np.ndarray], float]
 
 
@@ -70,7 +60,8 @@ class SimulationResult:
     t: np.ndarray
     y: np.ndarray
     h: np.ndarray
-    nfev: np.ndarray
+    nfev: int
+    nstepper: int
     err_norm: np.ndarray
     energy: Optional[np.ndarray]
     energy_drift: Optional[np.ndarray]
@@ -87,7 +78,8 @@ def simulate_adaptive(
     controller: StepSizeController,
     history: tuple[Sequence[float], np.ndarray] | None = None,
     energy_fn: EnergyFn | None = None,
-    max_steps: int = 1_000_000,
+    nfev0: int = 0,
+    max_steps: int = 1_000_000_000,
 ) -> SimulationResult:
     """Integrate y' = f(t, y) on [t0, t1] with adaptive time stepping.
 
@@ -123,7 +115,7 @@ def simulate_adaptive(
             t=np.array([t0], dtype=float),
             y=y0.reshape(1, -1),
             h=np.array([], dtype=float),
-            nfev=np.array([], dtype=int),
+            nfev=int(nfev0),
             err_norm=np.array([], dtype=float),
             energy=energy,
             energy_drift=drift,
@@ -144,8 +136,9 @@ def simulate_adaptive(
     t_hist: list[float] = [float(t0)]
     y_hist: list[np.ndarray] = [y.copy()]
     h_hist: list[float] = []
-    nfev_hist: list[int] = []
     err_hist: list[float] = []
+
+    nfev_total = int(nfev0)
 
     if history is not None:
         t_hist = history[0]
@@ -157,7 +150,6 @@ def simulate_adaptive(
         if len(t_hist) >= 2:
             dt = np.diff(np.asarray(t_hist, dtype=float))
             h_hist = [float(x) for x in dt]
-            nfev_hist = [0 for _ in range(dt.size)]
             err_hist = [float("nan") for _ in range(dt.size)]
 
     e0 = None
@@ -166,10 +158,10 @@ def simulate_adaptive(
         e_hist = [float(energy_fn(yi)) for yi in y_hist]
         e0 = float(e_hist[0])
 
-    n_accepted = max(0, len(t_hist) - 1)
+    n_stepper = max(0, len(t_hist) - 1)
     # Main loop: accept/reject steps until reaching t1.
     while (t - t1) * direction < 0.0:
-        if n_accepted >= max_steps:
+        if n_stepper >= max_steps:
             raise RuntimeError(f"Exceeded max_steps={max_steps}")
 
         remaining = t1 - t
@@ -181,6 +173,7 @@ def simulate_adaptive(
             raise RuntimeError("Step size underflow (h==0)")
 
         y_trial, err, nfev = stepper(f, J_fy, t_hist, y_hist, h)
+        nfev_total += int(nfev)
         err_norm = float(
             controller.error_norm(t=t, y=y, y_trial=y_trial, err=np.asarray(err, dtype=float), h=h)
         )
@@ -197,15 +190,13 @@ def simulate_adaptive(
             t_hist.append(float(t))
             y_hist.append(y.copy())
             h_hist.append(float(h))
-            nfev_hist.append(int(nfev))
             err_hist.append(err_norm)
 
             if energy_fn is not None:
                 e_hist.append(float(energy_fn(y)))
 
-            n_accepted += 1
-
         h = h_next
+        n_stepper += 1
 
     t_arr = np.asarray(t_hist, dtype=float)
     y_arr = np.vstack([yi.reshape(1, -1) for yi in y_hist]).astype(float, copy=False)
@@ -220,7 +211,8 @@ def simulate_adaptive(
         t=t_arr,
         y=y_arr,
         h=np.asarray(h_hist, dtype=float),
-        nfev=np.asarray(nfev_hist, dtype=int),
+        nfev=int(nfev_total),
+        nstepper=int(n_stepper),
         err_norm=np.asarray(err_hist, dtype=float),
         energy=energy_arr,
         energy_drift=drift_arr,
@@ -320,8 +312,10 @@ def simulate_bdf(
     h = h0
     t_init: list[float] = [t_span[0]]
     y_init: list[np.ndarray] = [np.asarray(problem.y0, dtype=float)]
+    nfev_startup_total = 0
     while len(t_init) < controller.order + 1:
         y_next, _err, _nfev = rk_step_embedded(f, t_init[-1], y_init[-1], h, tableau)
+        nfev_startup_total += int(_nfev)
         err_norm = controller.error_norm(t=t_init[-1], y=y_init[-1], y_trial=y_next, err=_err, h=h)
         if controller.accept(err_norm=err_norm):
             t_init.append(float(t_init[-1] + h))
@@ -339,5 +333,6 @@ def simulate_bdf(
         controller=controller,
         history=(t_init, y_init),
         energy_fn=E,
+        nfev0=int(nfev_startup_total),
         max_steps=int(max_steps),
     )

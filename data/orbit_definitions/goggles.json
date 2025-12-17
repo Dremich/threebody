@@ -1,0 +1,32 @@
+{
+  "name": "goggles",
+  "G": 1.0,
+  "masses": [
+    1.0,
+    1.0,
+    1.0
+  ],
+  "initial_state": [
+    -1.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0833,
+    0.12789,
+    0.0,
+    0.0833,
+    0.12789,
+    0.0,
+    -0.1666,
+    -0.25578,
+    0.0
+  ],
+  "period": 10.4668,
+  "description": "Suvakov-Dmitrasinovic butterfly I periodic orbit",
+  "reference": "http://dx.doi.org/10.1103/PhysRevLett.110.114301"
+}
