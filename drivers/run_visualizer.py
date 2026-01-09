@@ -20,7 +20,7 @@ from src.threebody.visualize import visualize
 # datastr = "moth_II_RK" # name of problem, without .npz. Example: "figure_eight_RK"
 # datastr = "moth_II_BDF" # name of problem, without .npz. Example: "figure_eight_RK"
 # datastr = "bumblebee_RK" # name of problem, without .npz. Example: "figure_eight_RK"
-datastr = "yarn_RK" # name of problem, without .npz. Example: "figure_eight_RK"
+datastr = "moth_I_BDF" # name of problem, without .npz. Example: "figure_eight_RK"
 
 ##############################################################################################
 
@@ -49,11 +49,13 @@ print(f"Final energy: {energy[-1] if energy is not None else 'N/A'}")
 print(f"Energy drift: {energy[-1] - energy[0] if energy is not None else 'N/A'}\n")
 
 if method == "RK":    
-    print("Total function evaluations (RK):", nfev, "\n")
-    print("Total attempted steps (RK):", nstepper, "\n")
+    print("Total function evaluations (RK):", nfev)
+    print("Total attempted steps (RK):", nstepper)
+    print("Total accepted steps (RK):", len(t)-1)
 else:
     print("Total number of Newton Raphson evaluations (BDF):", nfev)
     print("Total attempted steps (BDF):", nstepper, "\n")
+    print("Total accepted steps (BDF):", len(t)-1, "\n")
 
 # Visualize the result
 visualize(
