@@ -1,5 +1,6 @@
 title: Adaptive BDF Solver
 description: Robust N-Body integration using implicit methods and singularity softening.
-theme: jekyll-theme-minimal
+# Use our own minimal layout in `_layouts/default.html`.
+theme:
 show_downloads: true
 google_analytics:
