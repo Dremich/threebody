@@ -1,0 +1,125 @@
+:root {
+  color-scheme: light dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.4;
+}
+
+.page {
+  max-width: 980px;
+  padding: 14px;
+  margin: 0 auto;
+}
+
+.header {
+  margin-bottom: 12px;
+}
+
+.title {
+  margin: 0 0 6px 0;
+  font-size: 22px;
+  font-weight: 650;
+}
+
+.subtitle {
+  margin: 0;
+  opacity: 0.8;
+}
+
+.controls {
+  border: 1px solid rgba(127, 127, 127, 0.25);
+  border-radius: 10px;
+  padding: 10px;
+  margin: 10px 0;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.grow {
+  flex: 1 1 420px;
+}
+
+.label {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+select,
+input[type="range"] {
+  width: 100%;
+}
+
+.btn {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(127, 127, 127, 0.35);
+  background: rgba(127, 127, 127, 0.08);
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: rgba(127, 127, 127, 0.14);
+}
+
+.speed {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stats {
+  min-width: 220px;
+  opacity: 0.85;
+  font-size: 13px;
+}
+
+.hint {
+  opacity: 0.75;
+  font-size: 13px;
+}
+
+.viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.canvas {
+  width: 100%;
+  border: 1px solid rgba(127, 127, 127, 0.25);
+  border-radius: 10px;
+  background: rgba(127, 127, 127, 0.03);
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.muted {
+  opacity: 0.7;
+  font-weight: 500;
+}
+
+.footer {
+  margin-top: 14px;
+  opacity: 0.75;
+  font-size: 13px;
+}

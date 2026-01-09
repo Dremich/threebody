@@ -10,7 +10,7 @@ from run_orbit import run
 
 ## THIS SCRIPT SOLVES THE PROBLEM BELOW USING METHOD AND SAVES THE OUTPUT TO DATA/COMPUTATIONS 
 
-problem = "yarn"
+problem = "moth_I"
 method = "RK" # RK or BDF
 
 ##############################################################################################

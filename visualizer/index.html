@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Three-Body Web Visualizer (Experimental)</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="header">
+        <h1 class="title">Three-Body Web Visualizer <span class="muted">(experimental)</span></h1>
+        <p class="subtitle">Static GitHub Pages demo: precomputed data + JavaScript canvas rendering.</p>
+      </header>
+
+      <section class="controls">
+        <div class="row">
+          <label class="field">
+            <span class="label">Dataset</span>
+            <select id="dataset"></select>
+          </label>
+
+          <button id="play" class="btn" type="button">Play</button>
+
+          <label class="field">
+            <span class="label">Speed</span>
+            <div class="speed">
+              <button id="slower" class="btn" type="button" aria-label="Slower">-</button>
+              <span id="speedLabel" class="mono">1.0×</span>
+              <button id="faster" class="btn" type="button" aria-label="Faster">+</button>
+            </div>
+          </label>
+        </div>
+
+        <div class="row">
+          <label class="field grow">
+            <span class="label">Time</span>
+            <input id="scrub" type="range" min="0" max="1" value="0" step="1" />
+          </label>
+          <div class="stats" id="stats"></div>
+        </div>
+
+        <div class="row">
+          <div class="hint">
+            <span class="mono">Space</span> play/pause, <span class="mono">←/→</span> step, <span class="mono">- / +</span> speed, <span class="mono">t</span> trace.
+          </div>
+        </div>
+      </section>
+
+      <section class="viewer">
+        <canvas id="traj" class="canvas" width="900" height="560" aria-label="Trajectory canvas"></canvas>
+        <canvas id="energy" class="canvas" width="900" height="140" aria-label="Energy canvas"></canvas>
+      </section>
+
+      <footer class="footer">
+        <p>
+          Data is loaded from static JSON files under <span class="mono">visualizer/data/</span>. Add more exports by running
+          <span class="mono">scripts/export_web_data.py</span>.
+        </p>
+      </footer>
+    </main>
+
+    <script src="app.js" type="module"></script>
+  </body>
+</html>

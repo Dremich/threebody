@@ -1,0 +1,69 @@
+{
+  "entries": [
+    {
+      "key": "bumblebee_RK",
+      "label": "bumblebee_RK",
+      "url": "data/bumblebee_RK.json"
+    },
+    {
+      "key": "butterfly_I_RK",
+      "label": "butterfly_I_RK",
+      "url": "data/butterfly_I_RK.json"
+    },
+    {
+      "key": "butterfly_II_RK",
+      "label": "butterfly_II_RK",
+      "url": "data/butterfly_II_RK.json"
+    },
+    {
+      "key": "dragonfly_RK",
+      "label": "dragonfly_RK",
+      "url": "data/dragonfly_RK.json"
+    },
+    {
+      "key": "figure_eight_BDF",
+      "label": "figure_eight_BDF",
+      "url": "data/figure_eight_BDF.json"
+    },
+    {
+      "key": "figure_eight_RK",
+      "label": "figure_eight_RK",
+      "url": "data/figure_eight_RK.json"
+    },
+    {
+      "key": "goggles_RK",
+      "label": "goggles_RK",
+      "url": "data/goggles_RK.json"
+    },
+    {
+      "key": "moth_I_BDF",
+      "label": "moth_I_BDF",
+      "url": "data/moth_I_BDF.json"
+    },
+    {
+      "key": "moth_I_RK",
+      "label": "moth_I_RK",
+      "url": "data/moth_I_RK.json"
+    },
+    {
+      "key": "moth_II_BDF",
+      "label": "moth_II_BDF",
+      "url": "data/moth_II_BDF.json"
+    },
+    {
+      "key": "moth_II_RK",
+      "label": "moth_II_RK",
+      "url": "data/moth_II_RK.json"
+    },
+    {
+      "key": "yarn_RK",
+      "label": "yarn_RK",
+      "url": "data/yarn_RK.json"
+    },
+    {
+      "key": "yin_yang_I_RK",
+      "label": "yin_yang_I_RK",
+      "url": "data/yin_yang_I_RK.json"
+    }
+  ]
+}

@@ -13,7 +13,14 @@ from src.threebody.visualize import visualize
 
 ## THIS SCRIPT VISUALIZES THE OUTPUT OF A PREVIOUSLY SOLVED PROBLEM, SAVED IN DATA/COMPUTATIONS 
 
-datastr = "figure_eight_BDF" # name of problem, without .npz. Example: "figure_eight_RK"
+# datastr = "figure_eight_RK" # name of problem, without .npz. Example: "figure_eight_RK"
+# datastr = "figure_eight_BDF" # name of problem, without .npz. Example: "figure_eight_RK"
+# datastr = "moth_I_RK" # name of problem, without .npz. Example: "figure_eight_RK"
+# datastr = "moth_I_BDF" # name of problem, without .npz. Example: "figure_eight_RK"
+# datastr = "moth_II_RK" # name of problem, without .npz. Example: "figure_eight_RK"
+# datastr = "moth_II_BDF" # name of problem, without .npz. Example: "figure_eight_RK"
+# datastr = "bumblebee_RK" # name of problem, without .npz. Example: "figure_eight_RK"
+datastr = "yarn_RK" # name of problem, without .npz. Example: "figure_eight_RK"
 
 ##############################################################################################
 
