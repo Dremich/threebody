@@ -17,8 +17,8 @@ This project compares solutions to the 3-body problem using two different adapti
 * **3-Body Dynamics:** Computation of the accelerations and jacobian of the 3D 3-body problem. Jacobian required for Newton-Raphson within implicit solver.
 * **Interactive Visualizer:** Custom visualization app that allows for video-style playback of the solution trajectories (both local python and web).
 
-
 The problems showcased here were solved using BDF 5(6) and RK 5(4), using initial conditions from http://dx.doi.org/10.1103/PhysRevLett.110.114301. Solutions show the state evolution of all three bodies, as well as the total energy of the system over time. 
+
 ---
 
 ## 2. The Simulator
@@ -28,10 +28,9 @@ You can use the embedded viewer below, or open it directly: [visualizer/](visual
 
 <iframe
   src="visualizer/"
-  style="height: 900px;"
+  style="height: 1200px;"
   loading="lazy"
 ></iframe>
-
 
 ### Local Installation
 | **Figure 8** | **Goggles** |
@@ -67,10 +66,11 @@ The maximum tolerable error is composed of an absolute (atol) and relative (rtol
 
 with rtol: float = 1e-10 and atol: float = 1e-10.
 
-
 ### Step Size Determination
 The subsequent step size is determined using the current local error estimate. I generate an estimate of what step size will yield a valid next step, and scale it by a factor of 0.9. I additionally bound the change in step size by factors of 0.2 and 5. In implementation, this looks like
-$h_t+1 = clip(RMS_err^(-1/(p+1)), 0.2, 5)$.
+$$
+h_t+1 = clip(RMS_err^(-1/(p+1)), 0.2, 5)
+$$
 
 ### BDF Initial Steps
 For all problem, I used an initial step size of $h_0 = 1e-3$. BDF5(6) additionally requires 6 initial solution points. I use adaptive RK5(4) to generate these initial conditions, as BDF5 requires a 5th order method for error convergence.
