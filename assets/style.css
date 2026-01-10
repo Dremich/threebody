@@ -76,6 +76,14 @@ table td {
   vertical-align: top;
 }
 
+/* Force consistent sizing for the GIF comparison table in index.md */
+.media-table img {
+  display: block;
+  width: 100%;
+  height: 240px;
+  object-fit: contain;
+}
+
 img {
   max-width: 100%;
   height: auto;

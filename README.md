@@ -1,11 +1,8 @@
 ---
-layout: default
-title: Adaptive BDF Solver
----
 
 # Simulating the 3-Body Problem using Adaptive RK and BDE
 **Author:** Andrew Tolton  
-**University:** University of California, Los Angeles 
+**University:** University of California, Los Angeles  
 **Date:** December 2025
 
 ---
@@ -17,8 +14,8 @@ This project compares solutions to the 3-body problem using two different adapti
 * **3-Body Dynamics:** Computation of the accelerations and jacobian of the 3D 3-body problem. Jacobian required for Newton-Raphson within implicit solver.
 * **Interactive Visualizer:** Custom visualization app that allows for video-style playback of the solution trajectories (both local python and web).
 
-
 The problems showcased here were solved using BDF 5(6) and RK 5(4), using initial conditions from http://dx.doi.org/10.1103/PhysRevLett.110.114301. Solutions show the state evolution of all three bodies, as well as the total energy of the system over time. 
+
 ---
 
 ## 2. The Simulator

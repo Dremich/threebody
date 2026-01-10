@@ -5,7 +5,7 @@ title: Adaptive BDF Solver
 
 # Simulating the 3-Body Problem using Adaptive RK and BDE
 **Author:** Andrew Tolton  
-**University:** University of California, Los Angeles 
+**University:** University of California, Los Angeles  
 **Date:** December 2025
 
 ---
@@ -17,7 +17,7 @@ This project compares solutions to the 3-body problem using two different adapti
 * **3-Body Dynamics:** Computation of the accelerations and jacobian of the 3D 3-body problem. Jacobian required for Newton-Raphson within implicit solver.
 * **Interactive Visualizer:** Custom visualization app that allows for video-style playback of the solution trajectories (both local python and web).
 
-The problems showcased here were solved using BDF 5(6) and RK 5(4), using initial conditions from http://dx.doi.org/10.1103/PhysRevLett.110.114301. Solutions show the state evolution of all three bodies, as well as the total energy of the system over time. 
+The problems showcased here were solved using BDF 5(6) and RK 5(4), using initial conditions from [Milovan Šuvakov* and V. Dmitrašinović, 2013](http://dx.doi.org/10.1103/PhysRevLett.110.114301). Solutions show the state evolution of all three bodies, as well as the total energy of the system over time. 
 
 ---
 
@@ -39,6 +39,7 @@ You can use the embedded viewer below, or open it directly: [visualizer/](visual
 |:---:|:---:|
 | ![Butterfly Orbit Animation](renders/web_figure8.gif) | ![Butterfly Phase Plot](renders/web_goggles.gif) |
 | *Figure-8 solved w/ BDF5(6)* | *Goggles solved w/ RK5(4)* |
+{:.media-table}
 
 To install the simulator, clone this GitHub repo and run requirements.txt.
 To solve a new problem, create a JSON file defining a new orbit in data/orbit_definitions, and run drivers/solve_problem.py with the new filename. 
@@ -107,7 +108,7 @@ There are two interesting distinctions between RK5(4) and BDF5(6). First, while 
 ## 5. AI Transparency Statement
 I used AI-assisted tools (GitHub Copilot) to build the auxiliary project components (visualizer, file I/O, JSON parsing) and scaffold the project. All of the numerical algorithms, (equations of motion, Runge-Kutta/implicit IVP solvers, adaptive step-controllers) I implemented myself. All analyses, verification, and results reflect my own independent work and judgement.
 
-[Link to Source Code](./src/threebody)
+[Link to Source Code](https://github.com/Dremich/threebody)
 
 ---
 

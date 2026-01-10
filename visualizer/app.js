@@ -495,6 +495,9 @@ async function main() {
   bindUI(entries);
   await selectDataset(entries, initialKey);
 
+  // Autoplay on load.
+  setPlaying(true);
+
   requestAnimationFrame(tick);
 }
 
