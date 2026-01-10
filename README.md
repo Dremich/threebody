@@ -24,7 +24,7 @@ The problems showcased here were solved using BDF 5(6) and RK 5(4), using initia
 ## 2. The Simulator
 
 ### Interactive Web Version
-An interactive web-based visualizer is can be accessed at [visualizer/](visualizer/).
+An interactive web-based visualizer is can be accessed at [visualizer/](https://dremich.github.io/threebody/visualizer/).
 
 ### Local Installation
 | **Figure 8** | **Goggles** |
@@ -37,7 +37,7 @@ To solve a new problem, create a JSON file defining a new orbit in data/orbit_de
 To visualize a previously solved problem, enter the filename of the output saved in data/computations to run_visualizer.py.
 
 Controls:
-- + - for speeding up and slowing down time
+- `+`/`-` for speeding up and slowing down time
 - Space for pause/play
 - L/R for forward/back
 - Drag mouse on energy plot for time scrubbing
@@ -63,7 +63,7 @@ with rtol: float = 1e-10 and atol: float = 1e-10.
 
 ### Step Size Determination
 The subsequent step size is determined using the current local error estimate. I generate an estimate of what step size will yield a valid next step, and scale it by a factor of 0.9. I additionally bound the change in step size by factors of 0.2 and 5. In implementation, this looks like
-$h_t+1 = clip(RMS_err^(-1/(p+1)), 0.2, 5)$.
+$h_t+1 = clip(RMS_{err}^{(-1/(p+1))}, 0.2, 5)$.
 
 ### BDF Initial Steps
 For all problem, I used an initial step size of $h_0 = 1e-3$. BDF5(6) additionally requires 6 initial solution points. I use adaptive RK5(4) to generate these initial conditions, as BDF5 requires a 5th order method for error convergence.
@@ -92,6 +92,7 @@ Adaptive BDF:
 Overall, adaptive RK5(4) outperforms adaptive BDF5(6) for these three-body problems. RK5(4) requires fewer steps, significantly fewer function evaluations (and doesn't need the Jacobian of the system), and for most problems has comparable energy drift. 
 
 There are two interesting distinctions between RK5(4) and BDF5(6). First, while BDF5(6) does not perfectly conserve energy, the total energy of the system remains remarkably symmetric over the period of the orbit. This occurs for all initial conditions. RK5(4) Does not exhibit this behavior. Second, BDF5(6) is unable to find any solution for orbits with close passes, like the 'Goggles' orbit shown above. The solution is extremely stiff, requiring such small step sizes that the Newton-Raphson solver fails to converge. This severely limits the applicability of the BDF5(6) solver in this context. 
+
 ---
 
 ## 5. AI Transparency Statement
