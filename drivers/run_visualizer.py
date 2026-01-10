@@ -20,7 +20,7 @@ from src.threebody.visualize import visualize
 # datastr = "moth_II_RK" # name of problem, without .npz. Example: "figure_eight_RK"
 # datastr = "moth_II_BDF" # name of problem, without .npz. Example: "figure_eight_RK"
 # datastr = "bumblebee_RK" # name of problem, without .npz. Example: "figure_eight_RK"
-datastr = "moth_I_BDF" # name of problem, without .npz. Example: "figure_eight_RK"
+datastr = "goggles_RK" # name of problem, without .npz. Example: "figure_eight_RK"
 
 ##############################################################################################
 
